@@ -132,7 +132,8 @@ public class ExecutableCatchEventElement extends ExecutableFlowNode
   @Override
   public Collection<DirectBuffer> getInterruptingElementIds() {
     // TODO validate this approach
-    return Collections.emptySet(); // Collections.singleton(getId());
+    // return Collections.singleton(getId());
+    return Collections.emptySet();
   }
 
   @Override
