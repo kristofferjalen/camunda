@@ -8,7 +8,6 @@
 package io.camunda.zeebe.qa.util.cluster;
 
 import io.camunda.application.MainSupport;
-import io.camunda.application.Profile;
 import io.camunda.application.initializers.HealthConfigurationInitializer;
 import io.camunda.zeebe.qa.util.cluster.util.ContextOverrideInitializer;
 import io.camunda.zeebe.qa.util.cluster.util.ContextOverrideInitializer.Bean;
@@ -48,7 +47,6 @@ abstract class TestSpringApplication<T extends TestSpringApplication<T>>
     this.beans = beans;
     this.propertyOverrides = propertyOverrides;
     this.additionalProfiles = new ArrayList<>(additionalProfiles);
-    this.additionalProfiles.add(Profile.TEST.getId());
 
     // randomize ports to allow multiple concurrent instances
     overridePropertyIfAbsent("server.port", SocketUtil.getNextAddress().getPort());
@@ -108,9 +106,8 @@ abstract class TestSpringApplication<T extends TestSpringApplication<T>>
     return switch (port) {
       case REST -> restPort();
       case MONITORING -> monitoringPort();
-      default ->
-          throw new IllegalArgumentException(
-              "No known port %s; must one of MONITORING".formatted(port));
+      default -> throw new IllegalArgumentException(
+          "No known port %s; must one of MONITORING".formatted(port));
     };
   }
 
