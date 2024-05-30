@@ -8,6 +8,7 @@
 package io.camunda.zeebe.qa.util.cluster;
 
 import io.camunda.application.MainSupport;
+import io.camunda.application.Profile;
 import io.camunda.application.initializers.HealthConfigurationInitializer;
 import io.camunda.zeebe.qa.util.cluster.util.ContextOverrideInitializer;
 import io.camunda.zeebe.qa.util.cluster.util.ContextOverrideInitializer.Bean;
@@ -47,6 +48,7 @@ abstract class TestSpringApplication<T extends TestSpringApplication<T>>
     this.beans = beans;
     this.propertyOverrides = propertyOverrides;
     this.additionalProfiles = new ArrayList<>(additionalProfiles);
+    additionalProfiles.add(Profile.TEST.name());
 
     // randomize ports to allow multiple concurrent instances
     overridePropertyIfAbsent("server.port", SocketUtil.getNextAddress().getPort());
