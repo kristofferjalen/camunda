@@ -180,13 +180,12 @@ public final class EndEventProcessor implements BpmnElementProcessor<ExecutableE
     }
 
     @Override
-    public Either<Failure, ?> onActivate(
+    public Either<Failure, ?> finalizeActivation(
         final ExecutableEndEvent element, final BpmnElementContext activating) {
 
-      // the error must be caught at the parent or an upper scope (e.g. interrupting boundary event
-      // or
-      // event sub process). This is also why we don't have to transition to the completing state
-      // here
+      // the error must be caught at the parent or an upper scope
+      // (e.g. interrupting boundary event or event sub process).
+      // This is also why we don't have to transition to the completing state here
       return evaluateErrorCode(element, activating)
           .flatMap(errorCode -> eventPublicationBehavior.findErrorCatchEvent(errorCode, activating))
           .thenDo(
@@ -266,11 +265,17 @@ public final class EndEventProcessor implements BpmnElementProcessor<ExecutableE
     }
 
     @Override
-    public Either<Failure, ?> onActivate(
+    public Either<Failure, ?> finalizeActivation(
         final ExecutableEndEvent element, final BpmnElementContext activating) {
       final var activated =
           stateTransitionBehavior.transitionToActivated(activating, element.getEventType());
-      final var completing = stateTransitionBehavior.transitionToCompleting(activated);
+      stateTransitionBehavior.completeElement(activated);
+      return SUCCESS;
+    }
+
+    @Override
+    public Either<Failure, ?> finalizeCompletion(
+        final ExecutableEndEvent element, final BpmnElementContext completing) {
       return stateTransitionBehavior
           .transitionToCompleted(element, completing)
           .thenDo(
@@ -289,7 +294,7 @@ public final class EndEventProcessor implements BpmnElementProcessor<ExecutableE
     }
 
     @Override
-    public Either<Failure, ?> onActivate(
+    public Either<Failure, ?> finalizeActivation(
         final ExecutableEndEvent element, final BpmnElementContext activating) {
       return evaluateEscalationCode(element, activating)
           .thenDo(
@@ -310,9 +315,14 @@ public final class EndEventProcessor implements BpmnElementProcessor<ExecutableE
     @Override
     public Either<Failure, ?> onComplete(
         final ExecutableEndEvent element, final BpmnElementContext completing) {
-      return variableMappingBehavior
-          .applyOutputMappings(completing, element)
-          .flatMap(ok -> stateTransitionBehavior.transitionToCompleted(element, completing))
+      return variableMappingBehavior.applyOutputMappings(completing, element);
+    }
+
+    @Override
+    public Either<Failure, ?> finalizeCompletion(
+        final ExecutableEndEvent element, final BpmnElementContext completing) {
+      return stateTransitionBehavior
+          .transitionToCompleted(element, completing)
           .thenDo(
               completed -> stateTransitionBehavior.takeOutgoingSequenceFlows(element, completed));
     }
@@ -381,7 +391,7 @@ public final class EndEventProcessor implements BpmnElementProcessor<ExecutableE
     }
 
     @Override
-    public Either<Failure, ?> onActivate(
+    public Either<Failure, ?> finalizeActivation(
         final ExecutableEndEvent element, final BpmnElementContext activating) {
       final var activated =
           stateTransitionBehavior.transitionToActivated(activating, element.getEventType());
@@ -397,12 +407,12 @@ public final class EndEventProcessor implements BpmnElementProcessor<ExecutableE
         return SUCCESS;
       }
 
-      final var completing = stateTransitionBehavior.transitionToCompleting(activated);
-      return onComplete(element, completing);
+      stateTransitionBehavior.completeElement(activated);
+      return SUCCESS;
     }
 
     @Override
-    public Either<Failure, ?> onComplete(
+    public Either<Failure, ?> finalizeCompletion(
         final ExecutableEndEvent element, final BpmnElementContext completing) {
       return stateTransitionBehavior
           .transitionToCompleted(element, completing)
