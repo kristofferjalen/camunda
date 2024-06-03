@@ -148,6 +148,7 @@ public final class ClusterConfigurationManagementRequestsHandler
 
   private ActorFuture<ClusterConfigurationChangeResponse> handleRequest(
       final boolean dryRun, final ConfigurationChangeRequest request) {
+    final ActorFuture<ClusterConfigurationChangeResponse> response = executor.createFuture();
     final Function<ConfigurationChangeRequest, ActorFuture<ConfigurationChangeResult>> handler;
     if (dryRun) {
       handler = coordinator::simulateOperations;
@@ -155,15 +156,19 @@ public final class ClusterConfigurationManagementRequestsHandler
       handler = coordinator::applyOperations;
     }
 
-    return handler
-        .apply(request)
-        .thenApply(
-            result ->
-                new ClusterConfigurationChangeResponse(
-                    result.changeId(),
-                    result.currentConfiguration().members(),
-                    result.finalConfiguration().members(),
-                    result.operations()),
-            executor);
+    executor.run(
+        () ->
+            handler
+                .apply(request)
+                .thenApply(
+                    result ->
+                        new ClusterConfigurationChangeResponse(
+                            result.changeId(),
+                            result.currentConfiguration().members(),
+                            result.finalConfiguration().members(),
+                            result.operations()),
+                    executor)
+                .onComplete(response));
+    return response;
   }
 }
