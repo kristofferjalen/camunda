@@ -474,6 +474,11 @@
       <scope>test</scope>
     </dependency>
 
+    <dependency>
+      <groupId>io.camunda</groupId>
+      <artifactId>camunda-license</artifactId>
+    </dependency>
+
   </dependencies>
 
   <build>
