@@ -17,6 +17,8 @@ import static org.assertj.core.api.Assertions.tuple;
 import io.camunda.zeebe.engine.util.EngineRule;
 import io.camunda.zeebe.model.bpmn.Bpmn;
 import io.camunda.zeebe.model.bpmn.BpmnModelInstance;
+import io.camunda.zeebe.model.bpmn.builder.AbstractActivityBuilder;
+import io.camunda.zeebe.model.bpmn.builder.BoundaryEventBuilder;
 import io.camunda.zeebe.model.bpmn.builder.EventSubProcessBuilder;
 import io.camunda.zeebe.model.bpmn.builder.IntermediateCatchEventBuilder;
 import io.camunda.zeebe.model.bpmn.builder.ProcessBuilder;
@@ -939,145 +941,99 @@ public class ExecutionListenerEventElementsTest {
     }
   }
 
-  public static class ExecutionListenerBoundaryEventTest {
+  @RunWith(Parameterized.class)
+  public static class ParametrizedExecutionListenerBoundaryEventTest {
+
     @ClassRule public static final EngineRule ENGINE = EngineRule.singlePartition();
+
+    private static final String BOUNDARY_OWNER_ID = "boundary_event_owner";
 
     @Rule
     public final RecordingExporterTestWatcher recordingExporterTestWatcher =
         new RecordingExporterTestWatcher();
 
-    @Test
-    public void shouldCompleteErrorBoundaryEventWithMultipleEndExecutionListeners() {
-      // given
-      final String elementId = "boundary_err_event";
-      final long processInstanceKey =
-          createProcessInstance(
-              ENGINE,
-              Bpmn.createExecutableProcess(PROCESS_ID)
-                  .startEvent()
-                  .serviceTask("task", t -> t.zeebeJobType(SERVICE_TASK_TYPE))
-                  .boundaryEvent(
-                      elementId,
-                      b ->
-                          b.error("err")
-                              .zeebeEndExecutionListener(END_EL_TYPE + "_1")
-                              .zeebeEndExecutionListener(END_EL_TYPE + "_2")
-                              .endEvent("boundary_end"))
-                  .moveToActivity("task")
-                  .endEvent("main_end")
-                  .done());
+    @Parameter public BoundaryEventTestScenario scenario;
 
-      // when
-      ENGINE
-          .job()
-          .ofInstance(processInstanceKey)
-          .withType(SERVICE_TASK_TYPE)
-          .withErrorCode("err")
-          .throwError();
+    @Parameters(name = "{index}: {0}")
+    public static Collection<Object[]> boundaryEventParameters() {
+      final Function<StartEventBuilder, AbstractActivityBuilder<?, ?>> processWithServiceTask =
+          startEvent ->
+              startEvent.serviceTask(BOUNDARY_OWNER_ID, t -> t.zeebeJobType(SERVICE_TASK_TYPE));
 
-      // complete the end execution listener jobs
-      ENGINE.job().ofInstance(processInstanceKey).withType(END_EL_TYPE + "_1").complete();
-      ENGINE.job().ofInstance(processInstanceKey).withType(END_EL_TYPE + "_2").complete();
-
-      // assert the event has completed as expected
-      final BpmnElementType element = BpmnElementType.BOUNDARY_EVENT;
-      assertThat(
-              RecordingExporter.processInstanceRecords()
-                  .withProcessInstanceKey(processInstanceKey)
-                  .limitToProcessInstanceCompleted())
-          .extracting(
-              r -> r.getValue().getElementId(),
-              r -> r.getValue().getBpmnElementType(),
-              Record::getIntent)
-          .containsSubsequence(
-              tuple(PROCESS_ID, BpmnElementType.PROCESS, ProcessInstanceIntent.ELEMENT_ACTIVATED),
-              tuple(elementId, element, ProcessInstanceIntent.ELEMENT_ACTIVATED),
-              tuple(elementId, element, ProcessInstanceIntent.ELEMENT_COMPLETING),
-              tuple(elementId, element, ProcessInstanceIntent.COMPLETE_EXECUTION_LISTENER),
-              tuple(elementId, element, ProcessInstanceIntent.COMPLETE_EXECUTION_LISTENER),
-              tuple(elementId, element, ProcessInstanceIntent.ELEMENT_COMPLETED),
-              tuple(
-                  "boundary_end",
-                  BpmnElementType.END_EVENT,
-                  ProcessInstanceIntent.ELEMENT_COMPLETED),
-              tuple(PROCESS_ID, BpmnElementType.PROCESS, ProcessInstanceIntent.ELEMENT_COMPLETED));
+      return Arrays.asList(
+          new Object[][] {
+            {
+              BoundaryEventTestScenario.of(
+                  "error",
+                  processWithServiceTask,
+                  e -> e.error("err"),
+                  pik ->
+                      ENGINE
+                          .job()
+                          .ofInstance(pik)
+                          .withType(SERVICE_TASK_TYPE)
+                          .withErrorCode("err")
+                          .throwError())
+            },
+            {
+              BoundaryEventTestScenario.of(
+                  "message",
+                  processWithServiceTask,
+                  e -> e.message(m -> m.name("my_message").zeebeCorrelationKey("=\"key-1\"")),
+                  ignore ->
+                      ENGINE.message().withName("my_message").withCorrelationKey("key-1").publish())
+            },
+            {
+              BoundaryEventTestScenario.of(
+                  "signal",
+                  processWithServiceTask,
+                  e -> e.signal("my_signal"),
+                  ignore -> ENGINE.signal().withSignalName("my_signal").broadcast())
+            },
+            {
+              BoundaryEventTestScenario.of(
+                  "timer",
+                  processWithServiceTask,
+                  e -> e.timerWithDate("=now() + duration(\"PT15S\")"),
+                  ignore -> ENGINE.increaseTime(Duration.ofSeconds(15)))
+            },
+            {
+              BoundaryEventTestScenario.of(
+                  "escalation",
+                  se ->
+                      se.subProcess(
+                          BOUNDARY_OWNER_ID,
+                          s ->
+                              s.embeddedSubProcess()
+                                  .startEvent()
+                                  .endEvent("sub_end_event", e -> e.escalation("my_escalation"))),
+                  e -> e.escalation("my_escalation"),
+                  pik -> {})
+            }
+          });
     }
 
     @Test
-    public void shouldCompleteMessageBoundaryEventWithMultipleEndExecutionListeners() {
+    public void shouldCompleteBoundaryEventWithMultipleEndExecutionListeners() {
       // given
-      final String elementId = "boundary_message_event";
-      final long processInstanceKey =
-          createProcessInstance(
-              ENGINE,
-              Bpmn.createExecutableProcess(PROCESS_ID)
-                  .startEvent()
-                  .serviceTask("task", t -> t.zeebeJobType(SERVICE_TASK_TYPE))
-                  .boundaryEvent(
-                      elementId,
-                      b ->
-                          b.message(m -> m.name("my_message").zeebeCorrelationKey("=\"key-1\""))
-                              .zeebeEndExecutionListener(END_EL_TYPE + "_1")
-                              .zeebeEndExecutionListener(END_EL_TYPE + "_2")
-                              .endEvent("boundary_end"))
-                  .moveToActivity("task")
-                  .endEvent("main_end")
-                  .done());
+      final var boundaryEventElemId = "boundary_%s_event".formatted(scenario.name);
+      final var modelInstance =
+          scenario
+              .processBuilder
+              .apply(Bpmn.createExecutableProcess(PROCESS_ID).startEvent())
+              .boundaryEvent(
+                  boundaryEventElemId, b -> scenario.boundaryEventBuilderFunction.apply(b))
+              .zeebeEndExecutionListener(END_EL_TYPE + "_1")
+              .zeebeEndExecutionListener(END_EL_TYPE + "_2")
+              .endEvent("boundary_end")
+              .moveToActivity(BOUNDARY_OWNER_ID)
+              .endEvent("main_end")
+              .done();
 
-      // when
-      ENGINE.message().withName("my_message").withCorrelationKey("key-1").publish();
-
-      // complete the end execution listener jobs
-      ENGINE.job().ofInstance(processInstanceKey).withType(END_EL_TYPE + "_1").complete();
-      ENGINE.job().ofInstance(processInstanceKey).withType(END_EL_TYPE + "_2").complete();
-
-      // assert the event has completed as expected
-      final BpmnElementType element = BpmnElementType.BOUNDARY_EVENT;
-      assertThat(
-              RecordingExporter.processInstanceRecords()
-                  .withProcessInstanceKey(processInstanceKey)
-                  .limitToProcessInstanceCompleted())
-          .extracting(
-              r -> r.getValue().getElementId(),
-              r -> r.getValue().getBpmnElementType(),
-              Record::getIntent)
-          .containsSubsequence(
-              tuple(PROCESS_ID, BpmnElementType.PROCESS, ProcessInstanceIntent.ELEMENT_ACTIVATED),
-              tuple(elementId, element, ProcessInstanceIntent.ELEMENT_ACTIVATED),
-              tuple(elementId, element, ProcessInstanceIntent.ELEMENT_COMPLETING),
-              tuple(elementId, element, ProcessInstanceIntent.COMPLETE_EXECUTION_LISTENER),
-              tuple(elementId, element, ProcessInstanceIntent.COMPLETE_EXECUTION_LISTENER),
-              tuple(elementId, element, ProcessInstanceIntent.ELEMENT_COMPLETED),
-              tuple(
-                  "boundary_end",
-                  BpmnElementType.END_EVENT,
-                  ProcessInstanceIntent.ELEMENT_COMPLETED),
-              tuple(PROCESS_ID, BpmnElementType.PROCESS, ProcessInstanceIntent.ELEMENT_COMPLETED));
-    }
-
-    @Test
-    public void shouldCompleteSignalBoundaryEventWithMultipleEndExecutionListeners() {
-      // given
-      final String elementId = "boundary_signal_event";
-      final long processInstanceKey =
-          createProcessInstance(
-              ENGINE,
-              Bpmn.createExecutableProcess(PROCESS_ID)
-                  .startEvent()
-                  .serviceTask("task", t -> t.zeebeJobType(SERVICE_TASK_TYPE))
-                  .boundaryEvent(
-                      elementId,
-                      b ->
-                          b.signal("my_signal")
-                              .zeebeEndExecutionListener(END_EL_TYPE + "_1")
-                              .zeebeEndExecutionListener(END_EL_TYPE + "_2")
-                              .endEvent("boundary_end"))
-                  .moveToActivity("task")
-                  .endEvent("main_end")
-                  .done());
+      final long processInstanceKey = createProcessInstance(ENGINE, modelInstance);
 
       // when: trigger boundary event
-      ENGINE.signal().withSignalName("my_signal").broadcast();
+      scenario.triggerEvent.accept(processInstanceKey);
 
       // complete the end execution listener jobs
       ENGINE.job().ofInstance(processInstanceKey).withType(END_EL_TYPE + "_1").complete();
@@ -1095,11 +1051,13 @@ public class ExecutionListenerEventElementsTest {
               Record::getIntent)
           .containsSubsequence(
               tuple(PROCESS_ID, BpmnElementType.PROCESS, ProcessInstanceIntent.ELEMENT_ACTIVATED),
-              tuple(elementId, element, ProcessInstanceIntent.ELEMENT_ACTIVATED),
-              tuple(elementId, element, ProcessInstanceIntent.ELEMENT_COMPLETING),
-              tuple(elementId, element, ProcessInstanceIntent.COMPLETE_EXECUTION_LISTENER),
-              tuple(elementId, element, ProcessInstanceIntent.COMPLETE_EXECUTION_LISTENER),
-              tuple(elementId, element, ProcessInstanceIntent.ELEMENT_COMPLETED),
+              tuple(boundaryEventElemId, element, ProcessInstanceIntent.ELEMENT_ACTIVATED),
+              tuple(boundaryEventElemId, element, ProcessInstanceIntent.ELEMENT_COMPLETING),
+              tuple(
+                  boundaryEventElemId, element, ProcessInstanceIntent.COMPLETE_EXECUTION_LISTENER),
+              tuple(
+                  boundaryEventElemId, element, ProcessInstanceIntent.COMPLETE_EXECUTION_LISTENER),
+              tuple(boundaryEventElemId, element, ProcessInstanceIntent.ELEMENT_COMPLETED),
               tuple(
                   "boundary_end",
                   BpmnElementType.END_EVENT,
@@ -1107,110 +1065,25 @@ public class ExecutionListenerEventElementsTest {
               tuple(PROCESS_ID, BpmnElementType.PROCESS, ProcessInstanceIntent.ELEMENT_COMPLETED));
     }
 
-    @Test
-    public void shouldCompleteTimerBoundaryEventWithMultipleEndExecutionListeners() {
-      // given
-      final String elementId = "boundary_timer_event";
-      final long processInstanceKey =
-          createProcessInstance(
-              ENGINE,
-              Bpmn.createExecutableProcess(PROCESS_ID)
-                  .startEvent()
-                  .serviceTask("task", t -> t.zeebeJobType(SERVICE_TASK_TYPE))
-                  .boundaryEvent(
-                      elementId,
-                      b ->
-                          b.timerWithDate("=now() + duration(\"PT15S\")")
-                              .zeebeEndExecutionListener(END_EL_TYPE + "_1")
-                              .zeebeEndExecutionListener(END_EL_TYPE + "_2")
-                              .endEvent("boundary_end"))
-                  .moveToActivity("task")
-                  .endEvent("main_end")
-                  .done());
+    private record BoundaryEventTestScenario(
+        String name,
+        Function<StartEventBuilder, AbstractActivityBuilder<?, ?>> processBuilder,
+        UnaryOperator<BoundaryEventBuilder> boundaryEventBuilderFunction,
+        Consumer<Long> triggerEvent) {
 
-      // when: trigger boundary event
-      ENGINE.increaseTime(Duration.ofSeconds(15));
+      @Override
+      public String toString() {
+        return name;
+      }
 
-      // complete the end execution listener jobs
-      ENGINE.job().ofInstance(processInstanceKey).withType(END_EL_TYPE + "_1").complete();
-      ENGINE.job().ofInstance(processInstanceKey).withType(END_EL_TYPE + "_2").complete();
-
-      // assert the event has completed as expected
-      final BpmnElementType element = BpmnElementType.BOUNDARY_EVENT;
-      assertThat(
-              RecordingExporter.processInstanceRecords()
-                  .withProcessInstanceKey(processInstanceKey)
-                  .limitToProcessInstanceCompleted())
-          .extracting(
-              r -> r.getValue().getElementId(),
-              r -> r.getValue().getBpmnElementType(),
-              Record::getIntent)
-          .containsSubsequence(
-              tuple(PROCESS_ID, BpmnElementType.PROCESS, ProcessInstanceIntent.ELEMENT_ACTIVATED),
-              tuple(elementId, element, ProcessInstanceIntent.ELEMENT_ACTIVATED),
-              tuple(elementId, element, ProcessInstanceIntent.ELEMENT_COMPLETING),
-              tuple(elementId, element, ProcessInstanceIntent.COMPLETE_EXECUTION_LISTENER),
-              tuple(elementId, element, ProcessInstanceIntent.COMPLETE_EXECUTION_LISTENER),
-              tuple(elementId, element, ProcessInstanceIntent.ELEMENT_COMPLETED),
-              tuple(
-                  "boundary_end",
-                  BpmnElementType.END_EVENT,
-                  ProcessInstanceIntent.ELEMENT_COMPLETED),
-              tuple(PROCESS_ID, BpmnElementType.PROCESS, ProcessInstanceIntent.ELEMENT_COMPLETED));
-    }
-
-    @Test
-    public void shouldCompleteEscalationBoundaryEventWithMultipleEndExecutionListeners() {
-      // given
-      final String elementId = "boundary_escalation_event";
-      final long processInstanceKey =
-          createProcessInstance(
-              ENGINE,
-              Bpmn.createExecutableProcess("process")
-                  .startEvent()
-                  .subProcess(
-                      "sub",
-                      s ->
-                          s.embeddedSubProcess()
-                              .startEvent()
-                              .endEvent("sub_end_event", e -> e.escalation("my_escalation")))
-                  .boundaryEvent(
-                      elementId,
-                      b ->
-                          b.escalation("my_escalation")
-                              .zeebeEndExecutionListener(END_EL_TYPE + "_1")
-                              .zeebeEndExecutionListener(END_EL_TYPE + "_2")
-                              .endEvent("boundary_end"))
-                  .moveToActivity("sub")
-                  .endEvent("main_end")
-                  .done());
-
-      // complete the end execution listener jobs
-      ENGINE.job().ofInstance(processInstanceKey).withType(END_EL_TYPE + "_1").complete();
-      ENGINE.job().ofInstance(processInstanceKey).withType(END_EL_TYPE + "_2").complete();
-
-      // assert the event has completed as expected
-      final BpmnElementType element = BpmnElementType.BOUNDARY_EVENT;
-      assertThat(
-              RecordingExporter.processInstanceRecords()
-                  .withProcessInstanceKey(processInstanceKey)
-                  .limitToProcessInstanceCompleted())
-          .extracting(
-              r -> r.getValue().getElementId(),
-              r -> r.getValue().getBpmnElementType(),
-              Record::getIntent)
-          .containsSubsequence(
-              tuple(PROCESS_ID, BpmnElementType.PROCESS, ProcessInstanceIntent.ELEMENT_ACTIVATED),
-              tuple(elementId, element, ProcessInstanceIntent.ELEMENT_ACTIVATED),
-              tuple(elementId, element, ProcessInstanceIntent.ELEMENT_COMPLETING),
-              tuple(elementId, element, ProcessInstanceIntent.COMPLETE_EXECUTION_LISTENER),
-              tuple(elementId, element, ProcessInstanceIntent.COMPLETE_EXECUTION_LISTENER),
-              tuple(elementId, element, ProcessInstanceIntent.ELEMENT_COMPLETED),
-              tuple(
-                  "boundary_end",
-                  BpmnElementType.END_EVENT,
-                  ProcessInstanceIntent.ELEMENT_COMPLETED),
-              tuple(PROCESS_ID, BpmnElementType.PROCESS, ProcessInstanceIntent.ELEMENT_COMPLETED));
+      private static BoundaryEventTestScenario of(
+          final String name,
+          final Function<StartEventBuilder, AbstractActivityBuilder<?, ?>> processBuilder,
+          final UnaryOperator<BoundaryEventBuilder> boundaryEventBuilderFunction,
+          final Consumer<Long> triggerEvent) {
+        return new BoundaryEventTestScenario(
+            name, processBuilder, boundaryEventBuilderFunction, triggerEvent);
+      }
     }
   }
 }
