@@ -46,7 +46,7 @@ public class ExecutionListenerTest {
   static final String SUB_PROCESS_ID = "sub_".concat(PROCESS_ID);
   static final String START_EL_TYPE = "start_execution_listener_job";
   static final String END_EL_TYPE = "end_execution_listener_job";
-  private static final String SERVICE_TASK_TYPE = "test_service_task";
+  static final String SERVICE_TASK_TYPE = "test_service_task";
 
   @Rule
   public final RecordingExporterTestWatcher recordingExporterTestWatcher =
