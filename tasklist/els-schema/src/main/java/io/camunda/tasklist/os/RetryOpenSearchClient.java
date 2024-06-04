@@ -241,10 +241,14 @@ public class RetryOpenSearchClient {
   }
 
   public boolean createTemplate(final PutIndexTemplateRequest request) {
+    return createTemplate(request, false);
+  }
+
+  public boolean createTemplate(final PutIndexTemplateRequest request, final boolean overwrite) {
     return executeWithRetries(
         "CreateTemplate " + request.name(),
         () -> {
-          if (!templatesExist(request.name())) {
+          if (overwrite || !templatesExist(request.name())) {
             return openSearchClient.indices().putIndexTemplate(request).acknowledged();
           }
           return true;
@@ -621,13 +625,13 @@ public class RetryOpenSearchClient {
         });
   }
 
-  public Response getLifecyclePolicy(final String policyName) {
+  public Optional<Response> getLifecyclePolicy(final String policyName) {
     final Request request = new Request("GET", "/_plugins/_ism/policies/" + policyName);
     try {
-      return opensearchRestClient.performRequest(request);
+      return Optional.ofNullable(opensearchRestClient.performRequest(request));
     } catch (final ResponseException e) {
       if (e.getResponse().getStatusLine().getStatusCode() == HttpStatus.NOT_FOUND.value()) {
-        return null;
+        return Optional.empty();
       } else {
         throw new TasklistRuntimeException("Communication error with OpenSearch", e);
       }
@@ -687,5 +691,14 @@ public class RetryOpenSearchClient {
     final Request request = new Request("PUT", "/_index_template/" + templateName);
     request.setJsonEntity(updateJson);
     opensearchRestClient.performRequest(request);
+  }
+
+  public void putMapping(final PutMappingRequest request) {
+    executeWithRetries(
+        "PutMapping " + request.index(),
+        () -> {
+          openSearchClient.indices().putMapping(request);
+          return true;
+        });
   }
 }
