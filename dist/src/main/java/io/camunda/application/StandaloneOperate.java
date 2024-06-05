@@ -38,7 +38,7 @@ public class StandaloneOperate {
     final var standaloneOperateApplication =
         MainSupport.createDefaultApplicationBuilder()
             // TODO - remove before merging, just to show how LicenseCache will be used
-            //.sources(OperateModuleConfiguration.class, LicenseCache.class)
+            // .sources(OperateModuleConfiguration.class, LicenseCache.class)
             .sources(OperateModuleConfiguration.class)
             .profiles(Profile.OPERATE.getId(), Profile.STANDALONE.getId())
             .addCommandLineProperties(true)
