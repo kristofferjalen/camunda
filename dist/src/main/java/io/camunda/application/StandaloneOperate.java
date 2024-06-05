@@ -10,6 +10,7 @@ package io.camunda.application;
 import io.camunda.application.initializers.DefaultAuthenticationInitializer;
 import io.camunda.application.initializers.WebappsConfigurationInitializer;
 import io.camunda.application.listeners.ApplicationErrorListener;
+import io.camunda.license.LicenseCache;
 import io.camunda.operate.OperateModuleConfiguration;
 import io.camunda.webapps.WebappsModuleConfiguration;
 import java.util.HashMap;
@@ -38,8 +39,10 @@ public class StandaloneOperate {
     final var standaloneOperateApplication =
         MainSupport.createDefaultApplicationBuilder()
             // TODO - remove before merging, just to show how LicenseCache will be used
-            // .sources(OperateModuleConfiguration.class, LicenseCache.class)
-            .sources(OperateModuleConfiguration.class, WebappsModuleConfiguration.class)
+            .sources(
+                OperateModuleConfiguration.class,
+                WebappsModuleConfiguration.class,
+                LicenseCache.class)
             .profiles(Profile.OPERATE.getId(), Profile.STANDALONE.getId())
             .addCommandLineProperties(true)
             .properties(getDefaultProperties())
