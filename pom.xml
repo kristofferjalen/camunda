@@ -25,6 +25,7 @@
     <module>operate</module>
     <module>tasklist</module>
     <module>identity</module>
+    <module>testing/camunda-process-test-java</module>
   </modules>
 
   <scm>
