@@ -96,7 +96,7 @@ public class ModelUtil {
                     executionListenersSupportValidation.accept(listeners.getExecutionListeners()));
       } else {
         validationResultCollector.addError(
-            0, "Must not have more than one execution listener definition");
+            0, "Must not have more than one execution listeners definition");
       }
     }
   }

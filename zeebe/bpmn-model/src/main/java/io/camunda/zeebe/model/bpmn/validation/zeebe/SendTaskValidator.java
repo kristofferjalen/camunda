@@ -15,14 +15,13 @@
  */
 package io.camunda.zeebe.model.bpmn.validation.zeebe;
 
+import static io.camunda.zeebe.model.bpmn.util.ModelUtil.getExtensionElementsByType;
+
 import io.camunda.zeebe.model.bpmn.impl.ZeebeConstants;
-import io.camunda.zeebe.model.bpmn.instance.BpmnModelElementInstance;
-import io.camunda.zeebe.model.bpmn.instance.ExtensionElements;
 import io.camunda.zeebe.model.bpmn.instance.SendTask;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebePublishMessage;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeTaskDefinition;
 import java.util.Collection;
-import java.util.Collections;
 import org.camunda.bpm.model.xml.validation.ModelElementValidator;
 import org.camunda.bpm.model.xml.validation.ValidationResultCollector;
 
@@ -36,12 +35,10 @@ public final class SendTaskValidator implements ModelElementValidator<SendTask> 
   @Override
   public void validate(
       final SendTask element, final ValidationResultCollector validationResultCollector) {
-    final ExtensionElements extensionElements = element.getExtensionElements();
-
     final Collection<ZeebePublishMessage> publishMessageExtensions =
-        getExtensionElementsByType(extensionElements, ZeebePublishMessage.class);
+        getExtensionElementsByType(element, ZeebePublishMessage.class);
     final Collection<ZeebeTaskDefinition> taskDefinitionExtensions =
-        getExtensionElementsByType(extensionElements, ZeebeTaskDefinition.class);
+        getExtensionElementsByType(element, ZeebeTaskDefinition.class);
 
     if (!hasExactlyOneExtension(publishMessageExtensions, taskDefinitionExtensions)) {
       validationResultCollector.addError(
@@ -54,14 +51,6 @@ public final class SendTaskValidator implements ModelElementValidator<SendTask> 
     if (!publishMessageExtensions.isEmpty() && element.getMessage() == null) {
       validationResultCollector.addError(0, "Must reference a message");
     }
-  }
-
-  public <T extends BpmnModelElementInstance> Collection<T> getExtensionElementsByType(
-      final ExtensionElements extensionElements, Class<T> type) {
-    if (extensionElements == null) {
-      return Collections.emptyList();
-    }
-    return extensionElements.getChildElementsByType(type);
   }
 
   private boolean hasExactlyOneExtension(

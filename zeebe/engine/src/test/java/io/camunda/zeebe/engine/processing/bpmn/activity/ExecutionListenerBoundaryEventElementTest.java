@@ -171,7 +171,7 @@ public class ExecutionListenerBoundaryEventElementTest {
     }
 
     @Test
-    public void shouldNotDeployBoundaryEventWithStartExecutionListeners() {
+    public void shouldNotDeployProcessWithBoundaryEventWithStartExecutionListeners() {
       // given
       final var boundaryEventElemId = "boundary_%s_event".formatted(scenario.name);
       final var modelInstance =
@@ -224,7 +224,7 @@ public class ExecutionListenerBoundaryEventElementTest {
         new RecordingExporterTestWatcher();
 
     @Test
-    public void shouldNotDeployCompensationBoundaryEventWithExecutionListeners() {
+    public void shouldNotDeployProcessWithCompensationBoundaryEventWithExecutionListeners() {
       // given
       final var modelInstance =
           Bpmn.createExecutableProcess(PROCESS_ID)
