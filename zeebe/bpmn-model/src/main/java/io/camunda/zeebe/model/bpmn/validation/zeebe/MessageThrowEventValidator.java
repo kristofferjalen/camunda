@@ -15,15 +15,16 @@
  */
 package io.camunda.zeebe.model.bpmn.validation.zeebe;
 
-import static io.camunda.zeebe.model.bpmn.util.ModelUtil.getExtensionElementsByType;
-
 import io.camunda.zeebe.model.bpmn.impl.QueryImpl;
 import io.camunda.zeebe.model.bpmn.impl.ZeebeConstants;
+import io.camunda.zeebe.model.bpmn.instance.BpmnModelElementInstance;
+import io.camunda.zeebe.model.bpmn.instance.ExtensionElements;
 import io.camunda.zeebe.model.bpmn.instance.MessageEventDefinition;
 import io.camunda.zeebe.model.bpmn.instance.ThrowEvent;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebePublishMessage;
 import io.camunda.zeebe.model.bpmn.instance.zeebe.ZeebeTaskDefinition;
 import java.util.Collection;
+import java.util.Collections;
 import org.camunda.bpm.model.xml.validation.ModelElementValidator;
 import org.camunda.bpm.model.xml.validation.ValidationResultCollector;
 
@@ -41,10 +42,11 @@ public class MessageThrowEventValidator implements ModelElementValidator<ThrowEv
     if (isMessageThrowEvent(element)) {
       final MessageEventDefinition messageEventDefinition = getEventDefinition(element);
       final Collection<ZeebePublishMessage> publishMessageExtensions =
-          getExtensionElementsByType(messageEventDefinition, ZeebePublishMessage.class);
+          getExtensionElementsByType(
+              messageEventDefinition.getExtensionElements(), ZeebePublishMessage.class);
 
       final Collection<ZeebeTaskDefinition> taskDefinitionExtensions =
-          getExtensionElementsByType(element, ZeebeTaskDefinition.class);
+          getExtensionElementsByType(element.getExtensionElements(), ZeebeTaskDefinition.class);
 
       // a message throw event must have either one task definition or publish message
       if (!hasExactlyOneExtension(publishMessageExtensions, taskDefinitionExtensions)) {
@@ -70,6 +72,14 @@ public class MessageThrowEventValidator implements ModelElementValidator<ThrowEv
     return new QueryImpl<>(event.getEventDefinitions())
         .filterByType(MessageEventDefinition.class)
         .singleResult();
+  }
+
+  public <T extends BpmnModelElementInstance> Collection<T> getExtensionElementsByType(
+      final ExtensionElements extensionElements, Class<T> type) {
+    if (extensionElements == null) {
+      return Collections.emptyList();
+    }
+    return extensionElements.getChildElementsByType(type);
   }
 
   private boolean hasExactlyOneExtension(
