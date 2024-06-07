@@ -13,6 +13,7 @@ import io.atomix.cluster.AtomixCluster;
 import io.camunda.modules.actor.ActorClockConfiguration;
 import io.camunda.modules.actor.ActorIdleStrategyConfiguration.IdleStrategySupplier;
 import io.camunda.modules.actor.ActorSchedulerConfiguration;
+import io.camunda.modules.client.BrokerClientConfiguration;
 import io.camunda.modules.clustering.ClusterConfiguration;
 import io.camunda.modules.clustering.DynamicClusterServices;
 import io.camunda.zeebe.broker.client.api.BrokerClient;
@@ -141,6 +142,7 @@ final class StandaloneGatewaySecurityTest {
   private GatewayModuleConfiguration buildGateway(final GatewayProperties gatewayCfg) {
     final var gatewayConfig = new GatewayConfiguration(gatewayCfg, new LifecycleProperties());
     final var schedulerConfig = gatewayConfig.schedulerConfiguration();
+    final var brokerClientConfig = gatewayConfig.brokerClientConfig();
 
     final var clusterConfig = new GatewayClusterConfiguration().clusterConfig(gatewayConfig);
     final var clusterConfiguration = new ClusterConfiguration(clusterConfig, actorScheduler);
@@ -154,8 +156,9 @@ final class StandaloneGatewaySecurityTest {
     final var topologyManager = topologyServices.brokerTopologyManager();
     topologyServices.gatewayClusterTopologyService(topologyManager);
 
-    final BrokerClientComponent brokerClientComponent =
-        new BrokerClientComponent(gatewayConfig, atomixCluster, actorScheduler, topologyManager);
+    final var brokerClientComponent =
+        new BrokerClientConfiguration(
+            brokerClientConfig, atomixCluster, actorScheduler, topologyManager);
     brokerClient = brokerClientComponent.brokerClient();
     jobStreamClient = new JobStreamComponent().jobStreamClient(actorScheduler, atomixCluster);
 
